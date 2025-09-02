@@ -1,50 +1,61 @@
 pipeline {
     agent any
 
+    environment {
+        DOCKER_IMAGE = "your-dockerhub-username/hotstarby"
+        DOCKER_TAG   = "latest"
+    }
+
     stages {
         stage('Checkout') {
             steps {
-                // Checkout code from main branch
-                git branch: 'main', url: 'https://github.com/Harsha6404/hotstarby.git'
-
-                // Verify files
-                sh 'pwd'
-                sh 'ls -l'
-                sh 'ls -R'
+                git branch: 'main', url: 'https://github.com/Naveen1-6/hotstarby.git'
             }
         }
 
-        stage('Build WAR') {
+        stage('Build with Maven') {
             steps {
-                sh 'mvn clean package'
+                sh 'mvn clean package -DskipTests'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh '''
-                    docker rmi -f hotstar:v1 || true
-                    docker build -t hotstar:v1 -f /var/lib/jenkins/workspace/hotspot/Dockerfile /var/lib/jenkins/workspace/hotspot
-                '''
+                script {
+                    sh """
+                        docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} -f Dockerfile .
+                    """
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials',
+                                                 usernameVariable: 'DOCKER_USER',
+                                                 passwordVariable: 'DOCKER_PASS')]) {
+                    sh """
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+                        docker logout
+                    """
+                }
             }
         }
 
         stage('Deploy Container') {
             steps {
-                sh '''
-                    docker rm -f con8 || true
-                    docker run -d --name con8 -p 8008:8080 hotstar:v1
-                '''
+                sh """
+                    docker rm -f hotstarby || true
+                    docker run -d --name hotstarby -p 8080:8080 ${DOCKER_IMAGE}:${DOCKER_TAG}
+                """
             }
         }
+    }
 
-        stage('Docker Swarm Deploy') {
-            steps {
-                sh '''
-                    docker service update --image hotstar:v1 hotstarserv || \
-                    docker service create --name hotstarserv -p 8009:8080 --replicas=10 hotstar:v1
-                '''
-            }
+    post {
+        always {
+            sh 'docker system prune -f || true'
         }
     }
 }
