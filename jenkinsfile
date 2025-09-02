@@ -24,6 +24,9 @@ pipeline {
                 script {
                     sh """
                         docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
+
+                    docker rmi -f hotstar:v1 || true
+                    docker build -t hotstar:v1 -f /var/lib/jenkins/workspace/job2/Dockerfile /var/lib/jenkins/workspace/job2
                     """
                 }
             }
